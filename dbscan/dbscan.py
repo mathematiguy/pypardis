@@ -4,6 +4,7 @@ from scipy.spatial.distance import *
 from partition import KDPartitioner
 from aggregator import ClusterAggregator
 from operator import add
+import numpy as np
 
 LOGGING = False
 
