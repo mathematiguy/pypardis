@@ -71,22 +71,3 @@ class ClusterAggregator(object):
         """
         self.fwd[a] = b
         self.rev[b].add(a)
-
-
-if __name__ == '__main__':
-    # Tests of ClusterAggregator
-    t1 = ClusterAggregator()
-    t2 = ClusterAggregator()
-    t1 += (0, ('0:0', '1:1'))
-    t1 += (1, ('1:1', '2:0'))
-    t1 += (2, ('3:1',))
-    t1 += (3, ('4:1',))
-    t2 += (0, ('4:1', '3:1'))
-    t2 += (1, ('5:0', '0:0'))
-    # should be {0:{'0:0', '1:1', '2:0'}, 1:{'3:1'}, 2:{'4:1'}}
-    print t1.rev
-    # should be {0:{'4:1', '3:1'}, 1:{'5:0', '0:0'}}
-    print t2.rev
-    t1 += t2
-    # should be {0:{'0:0', '1:1', '2:0', '5:0'}, 1:{'3:1', '4:1'}}
-    print t1.rev
