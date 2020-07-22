@@ -1,5 +1,5 @@
-from Queue import Queue
-from geometry import BoundingBox
+from queue import Queue
+from .geometry import BoundingBox
 from operator import add
 import numpy as np
 import pyspark as ps
@@ -20,13 +20,13 @@ def median_search_split(partition, axis, next_part):
     Split the given partition into equal sized partitions along the
     given axis.
     """
-    sorted_values = partition.map(lambda ((k, p), v): v[axis]).sortBy(
+    sorted_values = partition.map(lambda x, v: v[axis]).sortBy(
         lambda v: v).collect()
     median = sorted_values[
         len(sorted_values) / 2]  # need a better way to find the median
-    part1 = partition.filter(lambda ((k, p), v): v[axis] < median)
-    part2 = partition.filter(lambda ((k, p), v): v[axis] >= median).map(
-        lambda ((k, p), v): ((k, next_part), v))
+    part1 = partition.filter(lambda x, v: v[axis] < median)
+    part2 = partition.filter(lambda x, v: v[axis] >= median).map(
+        lambda k, v: ((k[0], next_part), v))
     return part1, part2, median
 
 
@@ -58,14 +58,14 @@ def mean_var_split(partition, k, axis, next_label, mean, variance):
     std_dev = np.sqrt(variance)
     bounds = np.array([mean + (i - 3) * 0.3 * std_dev for i in xrange(7)])
     counts = partition.aggregate(np.zeros(7),
-                                 lambda x, (_, v):
-                                 x + 2 * (v[axis] < bounds) - 1,
+                                 lambda x, v:
+                                 x + 2 * (v[1][axis] < bounds) - 1,
                                  add)
     counts = np.abs(counts)
     boundary = bounds[np.argmin(counts)]
-    part1 = partition.filter(lambda (_, v): v[axis] < boundary)
-    part2 = partition.filter(lambda (_, v): v[axis] >= boundary).map(
-        lambda ((key, _), v): ((key, next_label), v))
+    part1 = partition.filter(lambda v: v[1][axis] < boundary)
+    part2 = partition.filter(lambda v: v[1][axis] >= boundary).map(
+        lambda key, v: ((key[0], next_label), v))
     return part1, part2, boundary
 
 
@@ -84,8 +84,8 @@ def min_var_split(partition, k, next_label):
     axis with greatest variance.
     """
     moments = partition.aggregate(np.zeros((3, k)),
-                                  lambda x, (keys, vector): x + np.array(
-                                      [np.ones(k), vector, vector ** 2]),
+                                  lambda x, vector: x + np.array(
+                                      [np.ones(k), vector[1], vector[1] ** 2]),
                                   add)
     means = moments[1] / moments[0]
     variances = moments[2] / moments[0] - means ** 2
@@ -133,9 +133,9 @@ class KDPartitioner(object):
             max_partitions) if max_partitions is not None else 4 ** self.k
         data.cache()
         box = data.aggregate(BoundingBox(k=self.k),
-                             lambda total, (_, v): total.union(BoundingBox(v)),
+                             lambda total, v: total.union(BoundingBox(v[1])),
                              lambda total, v: total.union(v))
-        first_partition = data.map(lambda (key, value): ((key, 0), value))
+        first_partition = data.map(lambda key, value: ((key, 0), value))
         self._create_partitions(first_partition, box)
         self.result = data.context.emptyRDD()
         for partition in self.partitions.itervalues():

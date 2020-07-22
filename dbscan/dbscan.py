@@ -1,8 +1,8 @@
 import pyspark as ps
 import sklearn.cluster as skc
 from scipy.spatial.distance import *
-from partition import KDPartitioner
-from aggregator import ClusterAggregator
+from .partition import KDPartitioner
+from .aggregator import ClusterAggregator
 from operator import add
 import numpy as np
 
@@ -34,7 +34,7 @@ def dbscan_partition(iterable, params):
         yield (y[i], '%i:%i%s' % (part, c[i], flag))
 
 
-def map_cluster_id((key, cluster_id), broadcast_dict):
+def map_cluster_id(x, broadcast_dict):
     """
     :type broadcast_dict: pyspark.Broadcast
     :param broadcast_dict: Broadcast variable containing a dictionary
@@ -44,6 +44,7 @@ def map_cluster_id((key, cluster_id), broadcast_dict):
     Modifies the item key to include the remapped cluster label,
     choosing the first id if there are multiple ids
     """
+    key, cluster_id = x
     cluster_id = next(iter(cluster_id)).strip('*')
     cluster_dict = broadcast_dict.value
     if '-1' not in cluster_id and cluster_id in cluster_dict:
@@ -112,9 +113,9 @@ class DBSCAN(object):
         self.expanded_boxes = {}
         self._create_neighborhoods()
         # repartition data set on the partition label
-        self.data = self.data.map(lambda ((k, p), v): (p, (k, v))) \
+        self.data = self.data.map(lambda k, v: (k[1], (k[0], v))) \
             .partitionBy(len(parts.partitions)) \
-            .map(lambda (p, (k, v)): ((k, p), v))
+            .map(lambda p, k: ((k[0], p), k[1]))
         # create parameters for sklearn DBSCAN
         params = {'eps': self.eps, 'min_samples': self.min_samples,
                   'metric': self.metric}
@@ -143,8 +144,8 @@ class DBSCAN(object):
             expanded_box = box.expand(2 * self.eps)
             self.expanded_boxes[label] = expanded_box
             neighbors[label] = self.data.filter(
-                lambda (k, v): expanded_box.contains(v)) \
-                .map(lambda (k, v): ((k, label), v))
+                lambda v: expanded_box.contains(v[1])) \
+                .map(lambda k: ((k[0], label), k[1]))
             new_data = new_data.union(neighbors[label])
         self.neighbors = neighbors
         self.data = new_data
